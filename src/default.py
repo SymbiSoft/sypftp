@@ -1,14 +1,23 @@
-import appuifw, e32, thread, btsocket
-
 # Only for local tests
-#import sys
-#sys.path.append('E:\\download\\libs\\')
+import sys
+sys.path.append('E:\\download\\libs\\')
 
-import ftpserver
+import appuifw, e32, thread, btsocket, ftpserver
 
 class sypftp(object):
   def __init__(self):
+    
+    # Everything to output
+    self.log_arr = []
+    
+    # Bind ftpserver logs to main console output
+    ftpserver.log       = self.log
+    ftpserver.logline   = self.log
+    ftpserver.logerror  = self.log
+    
     # Set look and feel
+    self.uiConsole = appuifw.Text()
+    
     appuifw.app.title = u"sypFTP"
     appuifw.app.menu = [
       (u"Run server", self.fakeBind),
@@ -16,10 +25,18 @@ class sypftp(object):
       (u"About",      self.fakeBind),
       (u"Exit",       self.exit)
     ]
-    appuifw.app.body = None
+    appuifw.app.body = self.uiConsole
+    appuifw.app.screen = "normal"
     
     # Bind "Exit" key
     appuifw.app.exit_key_handler = self.exit
+    
+    # Log output thread (well not realy, but that is the only way to do this in PyS60)
+    self.output_thread = e32.Ao_timer()
+    self.output_thread.after(0, self.output)
+    
+    # Determine thread lock
+    self.thread_lock  = thread.allocate_lock()
     
     # Start up network
     self.networking()
@@ -33,11 +50,18 @@ class sypftp(object):
     self.app_lock.wait()
   
   def fakeBind(self):
-    self.log('Bind!')
+    self.log("Fake BIND!")
+  
+  def output(self):
+    for index, log in enumerate(self.log_arr):
+      self.uiConsole.add(log)
+      self.log_arr.pop(index)
+    
+    self.output_thread.after(0, self.output)
   
   def log(self, text):
     if text:
-      print u"%s" % (text)
+      self.log_arr.append(u"%s\n" % (text))
   
   def networking(self):
     
@@ -64,8 +88,9 @@ class sypftp(object):
     
     self.ftp_handler.authorizer = self.ftp_authorizer
     self.ftp_handler.banner     = "sypFTP"
+    #self.ftp_handler.on_file_sent = self.ftp_on_file_received
     
-    self.ftp_address = (self.apo.ip(), 121)
+    self.ftp_address = (self.apo.ip(), 21)
     self.ftpd = ftpserver.FTPServer(self.ftp_address, self.ftp_handler)
     
     self.ftpd.max_cons = 256
@@ -74,7 +99,6 @@ class sypftp(object):
     self.ftpd.serve_forever()
   
   def ftp_server_deamon(self):
-    self.thread_lock  = thread.allocate_lock()
     self.ftp_thread   = thread.start_new_thread(self.ftp_server_init, ())
    
   def exit(self):
