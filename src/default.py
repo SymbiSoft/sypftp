@@ -1,22 +1,39 @@
-# Only for local tests
-import sys
-sys.path.append('E:\\download\\libs\\')
-
-import appuifw, e32, globalui, thread, re, dir_iter, btsocket, ftpserver
+import appuifw, e32, e32dbm, globalui, btsocket, thread, re, os, ftpserver
 
 class sypftp(object):
   def __init__(self):
     
+    self.__NAME__     = u"sypFTP"
+    self.__VERSION__  = u"0.1.0"
+    self.__AUTHOR__   = u"Intars Students"
+    self.__EMAIL__    = u"the.mobix@gmail.com"
+    
+    try:
+      m = re.match("^([A-Z])\:", os.getcwd())
+      self.__DRIVE__ = m.group(1)
+    except:
+      self.__DRIVE__ = "C:"
+    
+    self.__APPDIR__ = u"%s:\\data\\sypFTP" % self.__DRIVE__
+    
+    if os.path.isdir(self.__APPDIR__) == False:
+      os.makedirs(self.__APPDIR__)
+    
     # Some globaly used varibles
-    self.log_arr = []
+    self.log_arr      = []
     self.ftpd_running = False
+    self.db           = u"%s\\options.db" % self.__APPDIR__
     
     self.generateDriveList()
     
-    self._default_opt_port = 21
-    self._default_opt_user = u"user"
-    self._default_opt_pass = u"12345"
-    self._default_opt_dir  = u"E:\\"
+    self.default = {
+      u"port"  : 21,
+      u"user"  : u"user",
+      u"pass"  : u"12345",
+      u"dir"   : u"C:\\"
+    }
+    
+    self.getOptions()
     
     # Bind ftpserver logs to main console output
     ftpserver.log       = self.log
@@ -32,10 +49,10 @@ class sypftp(object):
     
     self.uiOptions = appuifw.Form(
       [
-        (u"Port", "number", 21),
-        (u"User", "text", u"user"),
-        (u"Paswd", "text", u"12345"),
-        (u"Dir.", "combo", (self.available_drives, 0))
+        (u"Port",   "number", self.default["port"]),
+        (u"User",   "text",   self.default["user"]),
+        (u"Paswd",  "text",   self.default["pass"]),
+        (u"Dir.",   "combo",  (self.available_drives, self.available_drives.index(self.default["dir"])))
       ],
       appuifw.FFormEditModeOnly
     )
@@ -67,6 +84,38 @@ class sypftp(object):
   def fakeBind(self):
     self.log("Fake BIND!")
   
+  def showAbout(self):
+    self.uiPopup.global_msg_query(
+      (
+      self.__NAME__ + " v." + self.__VERSION__ + "\n" +
+      "by " + self.__AUTHOR__ + "\n" + 
+      self.__EMAIL__
+      ),
+      u"About",
+      10
+    )
+  
+  def getOptions(self):
+    try:
+      db = e32dbm.open(self.db, "r")
+      
+      for key, value in db.items():
+        if key == "port":
+          self.default[key] = int(value)
+        else:
+          self.default[key] = (u"%s" % value)
+      
+      db.close()http://docs.python.org/library/re.html
+      
+    except Exception, e:
+      self.setOptions()
+  
+  def setOptions(self):
+    db = e32dbm.open(self.db, "c")
+    for key in self.default.keys():
+      db[key] = str(self.default[key])
+    db.close()
+  
   def generateDriveList(self):
     self.available_drives = [((u"%s\\" % drive)) for drive in e32.drive_list()]
   
@@ -75,8 +124,9 @@ class sypftp(object):
       ["connect", (u"Connect to network",   self.networking)],
       ["start",   (u"Start server",         self.ftp_server_start)],
       ["stop",    (u"Stop server",          self.ftp_server_stop)],
+      ["restart", (u"Restart server",       self.ftp_server_restart)],
       ["options", (u"Options",              self.showOptions)],
-      ["about",   (u"About",                self.fakeBind)],
+      ["about",   (u"About",                self.showAbout)],
       ["exit",    (u"Exit",                 self.exit)],
     ]
     
@@ -88,9 +138,9 @@ class sypftp(object):
           selstruc.append(bind)
         elif name == "start" and self.getIP() != False and self.ftpd_running == False:
           selstruc.append(bind)
-        elif name == "stop" and self.ftpd_running == True:
+        elif (name == "stop" or name == "restart") and self.ftpd_running == True:
           selstruc.append(bind)
-        elif name != "connect" and name != "start" and name != "stop":
+        elif name != "connect" and name != "start" and name != "stop" and name != "restart":
           selstruc.append(bind)
     
     if len(selstruc):
@@ -103,26 +153,25 @@ class sypftp(object):
       return False
     
     else:
-      self._default_opt_port = int(arg[0][2])
-    
-    result = re.search(re.compile("/^[a-zA-Z0-9_]+$/"), (u"%s" % arg[1][2]))
+      self.default["port"] = int(arg[0][2])
     
     if re.search("^[a-zA-Z0-9_]+$", (u"%s" % arg[1][2])) == None:
       self.uiPopup.global_note(u"You can only use A-z, 0-9 and underscore in username")
       return False
     
     else:
-      self._default_opt_user = (u"%s" % arg[1][2])
+      self.default["user"] = (u"%s" % arg[1][2])
       
     if re.search("^[a-zA-Z0-9_@#$%^&+=]+$", (u"%s" % arg[2][2])) == None:
       self.uiPopup.global_note(u"You can only use A-z, 0-9 and any of them (_@#$%^&+=) in password")
       return False
       
     else:
-      self._default_opt_pass = (u"%s" % arg[2][2])
+      self.default["pass"] = (u"%s" % arg[2][2])
     
-    self._default_opt_dir = (u"%s" % self.available_drives[arg[3][2][1]])
+    self.default["dir"] = (u"%s" % self.available_drives[arg[3][2][1]])
     
+    self.setOptions()
     self.uiPopup.global_note(u"Options saved", "info")
     return True
   
@@ -154,19 +203,26 @@ class sypftp(object):
   
   def networking(self):
     
-    self.log("Connecting to network ...");
-    
-    self.apid = btsocket.select_access_point()
-    self.apo  = btsocket.access_point(self.apid)
+    self.log("Connecting to network ...")
     
     try:
+      self.apid = btsocket.select_access_point()
+      self.apo  = btsocket.access_point(self.apid)
+      
       self.apo.start()
       btsocket.set_default_access_point(self.apo)
+      
       self.log("done.")
-      self.uiMenu(["start", "stop", "options", "about", "exit"])
+      self.uiMenu(["start", "restart", "stop", "options", "about", "exit"])
+      
     except:
       self.log("failed.")
       self.uiMenu(["connect", "options", "about", "exit"])
+  
+  
+  def ftp_server_restart(self):
+    self.ftp_server_stop()
+    self.ftp_server_start()
   
   def ftp_server_stop(self):
     try:
@@ -181,19 +237,19 @@ class sypftp(object):
     if self.ftpd_running == False:
       
       self.ftp_authorizer   = ftpserver.DummyAuthorizer()
-      self.ftp_authorizer.add_user(self._default_opt_user, self._default_opt_pass, self._default_opt_dir, perm='elradfmw')
+      self.ftp_authorizer.add_user(self.default["user"], self.default["pass"], self.default["dir"], perm='elradfmw')
       
       self.ftp_handler            = ftpserver.FTPHandler
       self.ftp_handler.authorizer = self.ftp_authorizer
       self.ftp_handler.banner     = "sypFTP"
       
       
-      self.ftpd = ftpserver.FTPServer((self.getIP(), self._default_opt_port), self.ftp_handler)
+      self.ftpd = ftpserver.FTPServer((self.getIP(), self.default["port"]), self.ftp_handler)
       self.ftpd.max_cons        = 256
       self.ftpd.max_cons_per_ip = 5
       self.ftpd_running         = True
       
-      self.uiMenu(["stop", "options", "about", "exit"])
+      self.uiMenu(["restart", "stop", "options", "about", "exit"])
       self.ftpd.serve_forever()
       
       self.ftpd_running = False
@@ -213,6 +269,7 @@ class sypftp(object):
   
   def exit(self):
     try:
+      self.ftp_server_stop()
       self.apo.stop()
     except:
       pass
