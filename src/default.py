@@ -1,4 +1,4 @@
-import appuifw, e32, e32dbm, globalui, btsocket, thread, re, os, ftpserver
+import appuifw, e32, e32dbm, globalui, btsocket, thread, re, os, pickle, ftpserver
 
 class sypFTP(object):
   
@@ -14,6 +14,7 @@ class sypFTP(object):
     self.__VERSION__  = u"0.1.0"
     self.__AUTHOR__   = u"Intars Students"
     self.__EMAIL__    = u"the.mobix@gmail.com"
+    self.__URL__      = u"http://code.google.com/p/sypftp/"
     
     self.log_arr      = []
     self.ftpd_running = False
@@ -170,11 +171,14 @@ class sypFTP(object):
       (
       self.__NAME__ + " v." + self.__VERSION__ + "\n" +
       "by " + self.__AUTHOR__ + "\n" + 
-      self.__EMAIL__
+      self.__EMAIL__ + "\n" +
+      self.__URL__
       ),
       u"About",
       10
     )
+  
+  def showUpdate(self):
     
   """ Create main menu from available items """
   def uiMenu(self, struc):
@@ -184,6 +188,7 @@ class sypFTP(object):
       ["stop",    (u"Stop server",          self.ftp_server_stop)],
       ["restart", (u"Restart server",       self.ftp_server_restart)],
       ["options", (u"Options",              self.showOptions)],
+      ["update",  (u"Update",               self.showUpdate)],
       ["about",   (u"About",                self.showAbout)],
       ["exit",    (u"Exit",                 self.exit)],
     ]
