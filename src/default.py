@@ -1,31 +1,29 @@
+""" Send greating message while modules are loading """
+if __name__ == '__main__':
+  print "sypFTP is loading .."
+
 import appuifw, e32, e32dbm, globalui, btsocket, thread, re, os, ftpserver
 
-class sypftp(object):
+class sypFTP(object):
+  
+  """ Init sypFTP object """
   def __init__(self):
     
+    """ Get info about drives in Symbian OS """
+    self.appDrive()
+    self.generateDriveList()
+    
+    """ Set app info """
     self.__NAME__     = u"sypFTP"
     self.__VERSION__  = u"0.1.0"
     self.__AUTHOR__   = u"Intars Students"
     self.__EMAIL__    = u"the.mobix@gmail.com"
     
-    try:
-      m = re.match("^([A-Z])\:", os.getcwd())
-      self.__DRIVE__ = m.group(1)
-    except:
-      self.__DRIVE__ = "C:"
-    
-    self.__APPDIR__ = u"%s:\\data\\sypFTP" % self.__DRIVE__
-    
-    if os.path.isdir(self.__APPDIR__) == False:
-      os.makedirs(self.__APPDIR__)
-    
-    # Some globaly used varibles
     self.log_arr      = []
     self.ftpd_running = False
     self.db           = u"%s\\options.db" % self.__APPDIR__
     
-    self.generateDriveList()
-    
+    """ Set default user options and load custom ones (if there is some) """
     self.default = {
       u"port"  : 21,
       u"user"  : u"user",
@@ -35,18 +33,22 @@ class sypftp(object):
     
     self.getOptions()
     
-    # Bind ftpserver logs to main console output
+    """ Hook ftpserver log to main console output """
     ftpserver.log       = self.log
     ftpserver.logline   = self.log
     ftpserver.logerror  = self.log
     
-    # Set look and feel
+    """ Set look and feel of main console """
     self.uiConsole = appuifw.Text()
-    appuifw.app.title = u"sypFTP"
+    self.uiPopup = globalui
+    
+    appuifw.app.title = self.__NAME__ 
     self.uiMenu(["connect", "options", "about", "exit"])
     appuifw.app.body = self.uiConsole
     appuifw.app.screen = "normal"
+    appuifw.app.exit_key_handler = self.exit
     
+    """ Set look and feel of options """
     self.uiOptions = appuifw.Form(
       [
         (u"Port",   "number", self.default["port"]),
@@ -58,33 +60,72 @@ class sypftp(object):
     )
     self.uiOptions.save_hook = self.saveOptions
     
-    self.uiPopup = globalui
+    """ Start console output thread """
+    self.console_thread = e32.Ao_timer()
+    self.console_thread.after(0, self.console)
     
-    # Bind "Exit" key
-    appuifw.app.exit_key_handler = self.exit
-    
-    # Log output thread (well not realy, but that is the only way to do this in PyS60)
-    self.output_thread = e32.Ao_timer()
-    self.output_thread.after(0, self.output)
-    
-    # Determine thread lock
-    self.thread_lock  = thread.allocate_lock()
-    
-    # Start up network
+    """ Start up network (if it possible)"""
     self.networking()
     
-    # ftpserver init
+    """ If there is network connection, start ftp server """
     if self.getIP():
       self.ftp_server_start()
     
-    # Lock and load (wait)
+    """ Lock and load """
     self.app_lock = e32.Ao_lock()
     self.app_lock.wait()
   
-  def fakeBind(self):
-    self.log("Fake BIND!")
+  """ Console output thread """
+  def console(self):
+    
+    if len(self.log_arr):
+      for index, msg in enumerate(self.log_arr):
+        self.uiConsole.add(msg)
+        self.log_arr.pop(index)
+    
+    self.console_thread.after(0, self.console)
   
+  """ Send log message to console output """
+  def log(self, msg):
+    
+    if msg:
+      self.log_arr.append(u"%s\n" % (msg))
+      
+  """ Some debugging needs to be done """
+  def debug(self, command):
+    
+    if command:
+      self.log(eval("dir(" + command + ")"))
+  
+  """ Stop FTP server, network connection and exit from sypFTP (bye) """
+  def exit(self):
+    try:
+      self.ftp_server_stop()
+      self.apo.stop()
+    except:
+      pass
+    
+    self.app_lock.signal()
+  
+  """ Get info about drives in Symbian OS """
+  def appDrive(self):
+    
+    try:
+      m = re.match("^([A-Z])\:", os.getcwd())
+      self.__DRIVE__ = m.group(1)
+    except:
+      self.__DRIVE__ = "C:"
+    
+    self.__APPDIR__ = u"%s:\\data\\sypFTP" % self.__DRIVE__
+  
+  """ Generate list of drives available inside Symbian OS from whom user to choose of """
+  def generateDriveList(self):
+    
+    self.available_drives = [((u"%s\\" % drive)) for drive in e32.drive_list()]
+  
+  """ Show simple about message for 10 sec """
   def showAbout(self):
+    
     self.uiPopup.global_msg_query(
       (
       self.__NAME__ + " v." + self.__VERSION__ + "\n" +
@@ -95,7 +136,10 @@ class sypftp(object):
       10
     )
   
+  """ Load options from database file and overwrite them with default ones or 
+  if database doesn't exist create one """
   def getOptions(self):
+    
     try:
       db = e32dbm.open(self.db, "r")
       
@@ -105,20 +149,21 @@ class sypftp(object):
         else:
           self.default[key] = (u"%s" % value)
       
-      db.close()http://docs.python.org/library/re.html
+      db.close()
       
     except Exception, e:
       self.setOptions()
   
+  """ Save user options to database file or create new one if there isn't such """
   def setOptions(self):
+    
     db = e32dbm.open(self.db, "c")
     for key in self.default.keys():
       db[key] = str(self.default[key])
+    
     db.close()
   
-  def generateDriveList(self):
-    self.available_drives = [((u"%s\\" % drive)) for drive in e32.drive_list()]
-  
+  """ Create main menu from available items """
   def uiMenu(self, struc):
     allstruc = [
       ["connect", (u"Connect to network",   self.networking)],
@@ -136,16 +181,20 @@ class sypftp(object):
       if struc.count(name):
         if name == "connect" and self.getIP() == False:
           selstruc.append(bind)
+          
         elif name == "start" and self.getIP() != False and self.ftpd_running == False:
           selstruc.append(bind)
-        elif (name == "stop" or name == "restart") and self.ftpd_running == True:
+          
+        elif name in ["stop", "restart"] and self.ftpd_running == True:
           selstruc.append(bind)
-        elif name != "connect" and name != "start" and name != "stop" and name != "restart":
+          
+        elif name not in ["connect", "start", "stop", "restart"]:
           selstruc.append(bind)
     
     if len(selstruc):
       appuifw.app.menu = selstruc
   
+  """ Check if entered user options are correct and if so, save them to database """
   def saveOptions(self, arg):
     
     if int(arg[0][2]) < 0 or int(arg[0][2]) > 65535:
@@ -156,7 +205,7 @@ class sypftp(object):
       self.default["port"] = int(arg[0][2])
     
     if re.search("^[a-zA-Z0-9_]+$", (u"%s" % arg[1][2])) == None:
-      self.uiPopup.global_note(u"You can only use A-z, 0-9 and underscore in username")
+      self.uiPopup.global_note(u"You can only use A-z, 0-9 and underscore in user name")
       return False
     
     else:
@@ -175,32 +224,21 @@ class sypftp(object):
     self.uiPopup.global_note(u"Options saved", "info")
     return True
   
-  def debug(self, command):
-    if command:
-      self.log(eval("dir(" + command + ")"))
-  
+  """ Show options dialogue """
   def showOptions(self):
+    
     self.generateDriveList()
     self.uiOptions.execute()
   
-  def output(self):
-    if len(self.log_arr):
-      for index, msg in enumerate(self.log_arr):
-        self.uiConsole.add(msg)
-        self.log_arr.pop(index)
-    
-    self.output_thread.after(0, self.output)
-  
-  def log(self, msg):
-    if msg:
-      self.log_arr.append(u"%s\n" % (msg))
-  
+  """ Get IP of current network connection """
   def getIP(self):
+    
     try:
       return self.apo.ip()
     except:
       return False
   
+  """ Start up network connection """
   def networking(self):
     
     self.log("Connecting to network ...")
@@ -219,42 +257,7 @@ class sypftp(object):
       self.log("failed.")
       self.uiMenu(["connect", "options", "about", "exit"])
   
-  
-  def ftp_server_restart(self):
-    self.ftp_server_stop()
-    self.ftp_server_start()
-  
-  def ftp_server_stop(self):
-    try:
-      self.ftpd.close_all()
-    except:
-      pass
-    
-    self.ftpd_running = False
-    self.uiMenu(["start", "options", "about", "exit"])
-  
-  def ftp_server_deamon(self):
-    if self.ftpd_running == False:
-      
-      self.ftp_authorizer   = ftpserver.DummyAuthorizer()
-      self.ftp_authorizer.add_user(self.default["user"], self.default["pass"], self.default["dir"], perm='elradfmw')
-      
-      self.ftp_handler            = ftpserver.FTPHandler
-      self.ftp_handler.authorizer = self.ftp_authorizer
-      self.ftp_handler.banner     = "sypFTP"
-      
-      
-      self.ftpd = ftpserver.FTPServer((self.getIP(), self.default["port"]), self.ftp_handler)
-      self.ftpd.max_cons        = 256
-      self.ftpd.max_cons_per_ip = 5
-      self.ftpd_running         = True
-      
-      self.uiMenu(["restart", "stop", "options", "about", "exit"])
-      self.ftpd.serve_forever()
-      
-      self.ftpd_running = False
-      self.log("FTP server stopped.")
-  
+  """ Start FTP server """
   def ftp_server_start(self):
     if self.getIP():
       self.ftpd_thread = thread.start_new_thread(self.ftp_server_deamon, ())
@@ -267,14 +270,47 @@ class sypftp(object):
       else:
         self.uiMenu(["connect", "options", "about", "exit"])
   
-  def exit(self):
+  """ Stop FTP server """
+  def ftp_server_stop(self):
+    
     try:
-      self.ftp_server_stop()
-      self.apo.stop()
+      self.ftpd.close_all()
     except:
       pass
     
-    self.app_lock.signal()
+    self.ftpd_running = False
+    self.uiMenu(["start", "options", "about", "exit"])
+  
+  """ Restart FTP server """
+  def ftp_server_restart(self):
+    
+    self.ftp_server_stop()
+    self.ftp_server_start()
+  
+  """ FTP server deamo """
+  def ftp_server_deamon(self):
+    
+    if self.ftpd_running == False:
+      
+      self.ftp_authorizer   = ftpserver.DummyAuthorizer()
+      self.ftp_authorizer.add_user(self.default["user"], self.default["pass"], self.default["dir"], perm='elradfmw')
+      
+      self.ftp_handler            = ftpserver.FTPHandler
+      self.ftp_handler.authorizer = self.ftp_authorizer
+      self.ftp_handler.banner     = self.__NAME__
+      
+      
+      self.ftpd = ftpserver.FTPServer((self.getIP(), self.default["port"]), self.ftp_handler)
+      self.ftpd.max_cons        = 256
+      self.ftpd.max_cons_per_ip = 5
+      self.ftpd_running         = True
+      
+      self.uiMenu(["restart", "stop", "options", "about", "exit"])
+      self.ftpd.serve_forever()
+      
+      self.ftpd_running = False
+      self.log("FTP server stopped.")
 
+""" Start up sypFTP """
 if __name__ == '__main__':
-  sypftp()
+  sypFTP()
