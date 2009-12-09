@@ -1,7 +1,3 @@
-""" Send greating message while modules are loading """
-if __name__ == '__main__':
-  print "sypFTP is loading .."
-
 import appuifw, e32, e32dbm, globalui, btsocket, thread, re, os, ftpserver
 
 class sypFTP(object):
@@ -71,6 +67,10 @@ class sypFTP(object):
     if self.getIP():
       self.ftp_server_start()
     
+    """ Start network check thread """
+    self.network_thread = e32.Ao_timer()
+    self.network_thread.after(10, self.network_deamon)
+    
     """ Lock and load """
     self.app_lock = e32.Ao_lock()
     self.app_lock.wait()
@@ -97,16 +97,6 @@ class sypFTP(object):
     if command:
       self.log(eval("dir(" + command + ")"))
   
-  """ Stop FTP server, network connection and exit from sypFTP (bye) """
-  def exit(self):
-    try:
-      self.ftp_server_stop()
-      self.apo.stop()
-    except:
-      pass
-    
-    self.app_lock.signal()
-  
   """ Get info about drives in Symbian OS """
   def appDrive(self):
     
@@ -122,6 +112,56 @@ class sypFTP(object):
   def generateDriveList(self):
     
     self.available_drives = [((u"%s\\" % drive)) for drive in e32.drive_list()]
+    
+  """ Get IP of current network connection """
+  def getIP(self):
+    
+    try:
+      return self.apo.ip()
+    except:
+      return False
+  
+  """ Start up network connection """
+  def networking(self):
+    
+    self.log("Connecting to network ...")
+    
+    try:
+      self.apid = btsocket.select_access_point()
+      self.apo  = btsocket.access_point(self.apid)
+      
+      self.apo.start()
+      btsocket.set_default_access_point(self.apo)
+      
+      self.log("done.")
+      self.uiMenu(["start", "restart", "stop", "options", "about", "exit"])
+      
+    except:
+      self.log("failed.")
+      self.uiMenu(["connect", "options", "about", "exit"])
+  
+  """ Check every 10 sec is there a network connection open, else try to reconnect.
+  If that fails, then if FTP server is running, turn it off."""
+  def network_deamon(self):
+    
+    if self.getIP() == False and self.ftpd_running:
+      self.log("Lost network connection!")  
+      self.networking()
+      
+      if self.getIP() == False and self.ftpd_running:
+        self.ftp_server_stop()
+        
+    self.network_thread.after(10, self.network_deamon)
+  
+  """ Stop FTP server, network connection and exit from sypFTP (bye) """
+  def exit(self):
+    try:
+      self.ftp_server_stop()
+      self.apo.stop()
+    except:
+      pass
+    
+    self.app_lock.signal()
   
   """ Show simple about message for 10 sec """
   def showAbout(self):
@@ -135,34 +175,7 @@ class sypFTP(object):
       u"About",
       10
     )
-  
-  """ Load options from database file and overwrite them with default ones or 
-  if database doesn't exist create one """
-  def getOptions(self):
     
-    try:
-      db = e32dbm.open(self.db, "r")
-      
-      for key, value in db.items():
-        if key == "port":
-          self.default[key] = int(value)
-        else:
-          self.default[key] = (u"%s" % value)
-      
-      db.close()
-      
-    except Exception, e:
-      self.setOptions()
-  
-  """ Save user options to database file or create new one if there isn't such """
-  def setOptions(self):
-    
-    db = e32dbm.open(self.db, "c")
-    for key in self.default.keys():
-      db[key] = str(self.default[key])
-    
-    db.close()
-  
   """ Create main menu from available items """
   def uiMenu(self, struc):
     allstruc = [
@@ -193,6 +206,39 @@ class sypFTP(object):
     
     if len(selstruc):
       appuifw.app.menu = selstruc
+      
+  """ Show options dialogue """
+  def showOptions(self):
+    
+    self.generateDriveList()
+    self.uiOptions.execute()
+  
+  """ Load options from database file and overwrite them with default ones or 
+  if database doesn't exist create one """
+  def getOptions(self):
+    
+    try:
+      db = e32dbm.open(self.db, "r")
+      
+      for key, value in db.items():
+        if key == "port":
+          self.default[key] = int(value)
+        else:
+          self.default[key] = (u"%s" % value)
+      
+      db.close()
+      
+    except Exception, e:
+      self.setOptions()
+  
+  """ Save user options to database file or create new one if there isn't such """
+  def setOptions(self):
+    
+    db = e32dbm.open(self.db, "c")
+    for key in self.default.keys():
+      db[key] = str(self.default[key])
+    
+    db.close()
   
   """ Check if entered user options are correct and if so, save them to database """
   def saveOptions(self, arg):
@@ -224,39 +270,6 @@ class sypFTP(object):
     self.uiPopup.global_note(u"Options saved", "info")
     return True
   
-  """ Show options dialogue """
-  def showOptions(self):
-    
-    self.generateDriveList()
-    self.uiOptions.execute()
-  
-  """ Get IP of current network connection """
-  def getIP(self):
-    
-    try:
-      return self.apo.ip()
-    except:
-      return False
-  
-  """ Start up network connection """
-  def networking(self):
-    
-    self.log("Connecting to network ...")
-    
-    try:
-      self.apid = btsocket.select_access_point()
-      self.apo  = btsocket.access_point(self.apid)
-      
-      self.apo.start()
-      btsocket.set_default_access_point(self.apo)
-      
-      self.log("done.")
-      self.uiMenu(["start", "restart", "stop", "options", "about", "exit"])
-      
-    except:
-      self.log("failed.")
-      self.uiMenu(["connect", "options", "about", "exit"])
-  
   """ Start FTP server """
   def ftp_server_start(self):
     if self.getIP():
@@ -279,7 +292,7 @@ class sypFTP(object):
       pass
     
     self.ftpd_running = False
-    self.uiMenu(["start", "options", "about", "exit"])
+    self.uiMenu(["connect", "start", "options", "about", "exit"])
   
   """ Restart FTP server """
   def ftp_server_restart(self):
