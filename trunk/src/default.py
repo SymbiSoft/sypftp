@@ -5,8 +5,6 @@ class sypFTP(object):
   """ Init sypFTP object """
   def __init__(self):
     
-    self.init_now = True
-    
     """ Get info about drives in Symbian OS """
     self.appDrive()
     self.generateDriveList()
@@ -21,6 +19,7 @@ class sypFTP(object):
     
     self.log_arr      = []
     self.ftpd_running = False
+    self.ftpd_auto    = True
     self.db           = u"%s\\options.db" % self.__APPDIR__
     
     """ Set default user options and load custom ones (if there is some) """
@@ -77,8 +76,6 @@ class sypFTP(object):
     
     """ Update thread """
     self.update_thread = e32.Ao_timer()
-    
-    self.init_now = False
     
     """ Lock and load """
     self.app_lock = e32.Ao_lock()
@@ -167,9 +164,10 @@ class sypFTP(object):
     
     if self.getIP() == False and self.ftpd_running:
       
-      self.log("Lost network connection!")
+      self.log("Lost network connection, reconnecting ...")
       try:
         self.apo.start()
+        self.log("Reconnected successfully")
       except:
         pass
       
@@ -432,11 +430,15 @@ class sypFTP(object):
         self.ftpd_running = False
         self.log("FTP server stopped.")
         
-    except:
-      if self.init_now:
+    except Exception, e:
+      if self.ftpd_auto:
         self.log("Couldn't auto start FTP server. Do it manually.")
       else:
-        self.log("Got error in FTP server deamon.")
+        self.log("FTP server error: %s" % e)
+      
+      self.ftpd_auto    = False
+      self.ftpd_running = False
+      self.uiMenu(["connect", "start", "options", "update", "about", "exit"])
 
 """ Start up sypFTP """
 if __name__ == '__main__':
