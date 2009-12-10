@@ -1,4 +1,7 @@
-import appuifw, e32, e32dbm, globalui, btsocket, thread, re, os, pickle, ftpserver
+import sys
+sys.path.append('E:\\download\\libs\\')
+
+import appuifw, e32, e32dbm, globalui, btsocket, urllib, thread, re, os, ftpserver
 
 class sypFTP(object):
   
@@ -11,14 +14,15 @@ class sypFTP(object):
     
     """ Set app info """
     self.__NAME__     = u"sypFTP"
-    self.__VERSION__  = u"0.1.0"
+    self.__VERSION__  = u"0.0.1"
     self.__AUTHOR__   = u"Intars Students"
     self.__EMAIL__    = u"the.mobix@gmail.com"
     self.__URL__      = u"http://code.google.com/p/sypftp/"
+    self.__UPDATE__   = u"http://sypftp.googlecode.com/svn/trunk/VERSION"
     
     self.log_arr      = []
     self.ftpd_running = False
-    self.db           = u"%s\\options.db" % self.__APPDIR__
+    self.db           = u"%s\\options-a.db" % self.__APPDIR__
     
     """ Set default user options and load custom ones (if there is some) """
     self.default = {
@@ -40,7 +44,7 @@ class sypFTP(object):
     self.uiPopup = globalui
     
     appuifw.app.title = self.__NAME__ 
-    self.uiMenu(["connect", "options", "about", "exit"])
+    self.uiMenu(["connect", "options", "update", "about", "exit"])
     appuifw.app.body = self.uiConsole
     appuifw.app.screen = "normal"
     appuifw.app.exit_key_handler = self.exit
@@ -71,6 +75,9 @@ class sypFTP(object):
     """ Start network check thread """
     self.network_thread = e32.Ao_timer()
     self.network_thread.after(10, self.network_deamon)
+    
+    """ Update thread """
+    self.update_thread = e32.Ao_timer()
     
     """ Lock and load """
     self.app_lock = e32.Ao_lock()
@@ -135,7 +142,7 @@ class sypFTP(object):
       btsocket.set_default_access_point(self.apo)
       
       self.log("done.")
-      self.uiMenu(["start", "restart", "stop", "options", "about", "exit"])
+      self.uiMenu(["start", "restart", "stop", "options", "update", "about", "exit"])
       
     except:
       self.log("failed.")
@@ -156,9 +163,16 @@ class sypFTP(object):
   
   """ Stop FTP server, network connection and exit from sypFTP (bye) """
   def exit(self):
+    
     try:
       self.ftp_server_stop()
       self.apo.stop()
+    except:
+      pass
+      
+    try:
+      self.console_thread.cancel()
+      self.network_thread.cancel()
     except:
       pass
     
@@ -178,8 +192,54 @@ class sypFTP(object):
       10
     )
   
+  """ Check for update and if there is something new try to download/install it """
   def showUpdate(self):
+  
+    self.log("Checking for update ...")
     
+    XML   = ""
+    ERROR = False
+    
+    try:
+      XML = urllib.urlopen(self.__UPDATE__).read()
+    except:
+      pass
+    
+    if XML != "":
+      v = re.search("<version>(\d+\.\d+\.\d+)<\/version>", XML)
+      u = re.search("<url>(.*?)<\/url>", XML)
+      
+      if v != None and u != None:
+        if v.group(1) == self.__VERSION__:
+          self.log("sypFTP is up-to-date.")
+          
+        else:
+          self.log("Updating to sypFTP v." + v.group(1) + " ...")
+          self.launchBrowser(u.group(1))
+          
+      else:
+        ERROR = True
+      
+    else:
+      ERROR = True
+      
+    if ERROR:
+      self.log("Couldn't fetch update now.")
+  
+  """ Opens update checker in other thread """
+  def update_deamon(self):
+    self.update_thread.after(0, self.showUpdate)
+  
+  """ Launch in-build Web browser """
+  def launchBrowser(self, url):
+    try:
+      e32.start_exe("z:\\system\\programs\\apprun.exe", "z:\\System\\Apps\\Browser\\Browser.app \"%s\"" % url , 1)
+    except:
+      try:
+        e32.start_exe("BrowserNG.exe", " \"4 %s %s\"" % (url, str(self.apid)), 1)
+      except:
+        self.log("Couldn't launch a browser.")
+  
   """ Create main menu from available items """
   def uiMenu(self, struc):
     allstruc = [
@@ -188,7 +248,7 @@ class sypFTP(object):
       ["stop",    (u"Stop server",          self.ftp_server_stop)],
       ["restart", (u"Restart server",       self.ftp_server_restart)],
       ["options", (u"Options",              self.showOptions)],
-      ["update",  (u"Update",               self.showUpdate)],
+      ["update",  (u"Update",               self.update_deamon)],
       ["about",   (u"About",                self.showAbout)],
       ["exit",    (u"Exit",                 self.exit)],
     ]
@@ -204,6 +264,9 @@ class sypFTP(object):
           selstruc.append(bind)
           
         elif name in ["stop", "restart"] and self.ftpd_running == True:
+          selstruc.append(bind)
+        
+        elif name == "update" and self.getIP() != False:
           selstruc.append(bind)
           
         elif name not in ["connect", "start", "stop", "restart"]:
@@ -286,7 +349,7 @@ class sypFTP(object):
       if self.getIP():
         self.ftpd_thread = thread.start_new_thread(self.ftp_server_deamon, ())
       else:
-        self.uiMenu(["connect", "options", "about", "exit"])
+        self.uiMenu(["connect", "options", "update", "about", "exit"])
   
   """ Stop FTP server """
   def ftp_server_stop(self):
@@ -297,7 +360,7 @@ class sypFTP(object):
       pass
     
     self.ftpd_running = False
-    self.uiMenu(["connect", "start", "options", "about", "exit"])
+    self.uiMenu(["connect", "start", "options", "update", "about", "exit"])
   
   """ Restart FTP server """
   def ftp_server_restart(self):
@@ -323,7 +386,7 @@ class sypFTP(object):
       self.ftpd.max_cons_per_ip = 5
       self.ftpd_running         = True
       
-      self.uiMenu(["restart", "stop", "options", "about", "exit"])
+      self.uiMenu(["restart", "stop", "options", "update", "about", "exit"])
       self.ftpd.serve_forever()
       
       self.ftpd_running = False
