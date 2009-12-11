@@ -1,3 +1,6 @@
+import sys
+sys.path.append('E:\\download\\libs\\')
+
 import appuifw, e32, e32dbm, globalui, btsocket, urllib, thread, re, os, ftpserver
 
 class sypFTP(object):
@@ -20,7 +23,7 @@ class sypFTP(object):
     self.log_arr      = []
     self.ftpd_running = False
     self.ftpd_auto    = True
-    self.db           = u"%s\\options.db" % self.__APPDIR__
+    self.db           = u"%s\\optionsw.db" % self.__APPDIR__
     
     """ Set default user options and load custom ones (if there is some) """
     self.default = {
@@ -41,7 +44,7 @@ class sypFTP(object):
     self.uiConsole = appuifw.Text()
     self.uiPopup = globalui
     
-    appuifw.app.title = self.__NAME__ 
+    appuifw.app.title = self.__NAME__
     self.uiMenu(["connect", "options", "about", "exit"])
     appuifw.app.body = self.uiConsole
     appuifw.app.screen = "normal"
@@ -149,7 +152,7 @@ class sypFTP(object):
       self.apo  = btsocket.access_point(self.apid)
       
       self.apo.start()
-      btsocket.set_default_access_point(self.apo)
+      #btsocket.set_default_access_point(self.apo)
       
       self.log("done.")
       self.uiMenu(["start", "restart", "stop", "options", "update", "about", "exit"])
@@ -230,16 +233,25 @@ class sypFTP(object):
       pass
     
     if XML != "":
-      v = re.search("<version>(\d+\.\d+\.\d+)<\/version>", XML)
-      u = re.search("<url>(.*?)<\/url>", XML)
+      #major, minor, micro = e32.pys60_version_info
       
-      if v != None and u != None:
+      pys60_version = ""
+      for v in e32.pys60_version_info[:3]:
+        pys60_version += str(v) + "\."
+      
+      v = re.search("<version>(\d+\.\d+\.\d+)<\/version>", XML)
+      u = re.search("<url build=\"" + pys60_version + "\">(.*?)<\/url>", XML)
+      
+      if v != None:
         if v.group(1) == self.__VERSION__:
           self.log("sypFTP is up-to-date.")
           
-        else:
+        elif u != None:
           self.log("Updating to sypFTP v." + v.group(1) + " ...")
           self.launchBrowser(u.group(1))
+          
+        else:
+          self.log("There aren't any build for PyS60 " + pys60_version.replace("\\", "") + " You should update to newer version of PyS60 or try to build sypFTP for this one.")
           
       else:
         ERROR = True
