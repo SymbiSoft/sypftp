@@ -1,6 +1,3 @@
-import sys
-sys.path.append('E:\\download\\libs\\')
-
 import appuifw, e32, e32dbm, globalui, btsocket, urllib, thread, re, os, ftpserver
 
 class sypFTP(object):
@@ -23,7 +20,7 @@ class sypFTP(object):
     self.log_arr      = []
     self.ftpd_running = False
     self.ftpd_auto    = True
-    self.db           = u"%s\\optionsw.db" % self.__APPDIR__
+    self.db           = u"%s\\options.db" % self.__APPDIR__
     
     """ Set default user options and load custom ones (if there is some) """
     self.default = {
@@ -233,8 +230,6 @@ class sypFTP(object):
       pass
     
     if XML != "":
-      #major, minor, micro = e32.pys60_version_info
-      
       pys60_version = ""
       for v in e32.pys60_version_info[:3]:
         pys60_version += str(v) + "\."
@@ -251,7 +246,7 @@ class sypFTP(object):
           self.launchBrowser(u.group(1))
           
         else:
-          self.log("There aren't any build for PyS60 " + pys60_version.replace("\\", "") + " You should update to newer version of PyS60 or try to build sypFTP for this one.")
+          self.log("\nThere aren't any builds for PyS60 " + pys60_version.replace("\\", "") + " You should update to newer version of PyS60 or try to build sypFTP for this one.")
           
       else:
         ERROR = True
