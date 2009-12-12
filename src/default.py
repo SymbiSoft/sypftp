@@ -63,7 +63,7 @@ class sypFTP(object):
     self.console_thread = e32.Ao_timer()
     self.console_thread.after(0, self.console)
     
-    """ Start up network (if it possible)"""
+    """ Start up network (if it possible) """
     self.networking()
     
     """ If there is network connection, start ftp server """
@@ -174,14 +174,22 @@ class sypFTP(object):
       if self.getIP() == False:
         
         try:
-          self.apo.stop()
+          self.ftpd.close_all()
         except:
           pass
         
-        self.networking()
+        try:
+          self.apo.stop()
+          self.apo.start()
+        except:
+          pass
         
         if self.getIP() == False and self.ftpd_running:
-          self.ftp_server_stop()
+          self.ftpd_running = False
+          self.uiMenu(["connect", "start", "options", "update", "about", "exit"])
+          
+        elif self.getIP() != False and self.ftpd_running:
+          self.ftp_server_start()
         
     self.network_thread.after(10, self.network_deamon)
   
@@ -216,7 +224,7 @@ class sypFTP(object):
       10
     )
   
-  """ Check for update and if there is something new, try to download/install it """
+  """ Check for update and if there is something new, take user to Web browser to download package """
   def showUpdate(self):
   
     self.log("Checking for update ...")
@@ -429,6 +437,7 @@ class sypFTP(object):
         self.ftpd = ftpserver.FTPServer((self.getIP(), self.default["port"]), self.ftp_handler)
         self.ftpd.max_cons        = 256
         self.ftpd.max_cons_per_ip = 5
+        self.ftpd.timeout         = 0
         self.ftpd_running         = True
         
         self.uiMenu(["restart", "stop", "options", "update", "about", "exit"])
@@ -436,6 +445,7 @@ class sypFTP(object):
         
         self.ftpd_running = False
         self.log("FTP server stopped.")
+        self.uiMenu(["connect", "start", "options", "update", "about", "exit"])
         
     except Exception, e:
       if self.ftpd_auto:
