@@ -149,7 +149,6 @@ class sypFTP(object):
       self.apo  = btsocket.access_point(self.apid)
       
       self.apo.start()
-      #btsocket.set_default_access_point(self.apo)
       
       self.log("done.")
       self.uiMenu(["start", "restart", "stop", "options", "update", "about", "exit"])
