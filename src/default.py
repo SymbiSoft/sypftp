@@ -1,3 +1,5 @@
+# coding=utf-8
+
 import appuifw, e32, e32dbm, globalui, btsocket, urllib, thread, re, os, ftpserver
 
 class sypFTP(object):
@@ -11,7 +13,7 @@ class sypFTP(object):
     
     """ Set app info """
     self.__NAME__     = u"sypFTP"
-    self.__VERSION__  = u"0.1.0"
+    self.__VERSION__  = u"0.1.1"
     self.__AUTHOR__   = u"Intars Students"
     self.__EMAIL__    = u"the.mobix@gmail.com"
     self.__URL__      = u"http://code.google.com/p/sypftp/"
@@ -95,7 +97,10 @@ class sypFTP(object):
   def log(self, msg):
     
     if msg:
-      self.log_arr.append(u"%s\n" % (msg))
+      try:
+        self.log_arr.append(u"%s\n" % (msg.decode("utf-8")))
+      except UnicodeDecodeError:
+        pass
       
   """ Some debugging needs to be done """
   def debug(self, command):
